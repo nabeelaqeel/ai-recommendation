@@ -9,6 +9,7 @@ outputs/
 
 # Raw / large data (PAAWS lives on an external SSD, never in the repo)
 data/raw/
+data/processed/
 *.edf
 *.zip
 

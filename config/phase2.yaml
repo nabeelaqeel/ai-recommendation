@@ -1,0 +1,42 @@
+# Phase 2 configuration.
+#
+# Every clinical choice is a parameter so the pipeline can be re-run unchanged
+# after review by Assoc. Prof. Dr. Eg Kah Peng. Nothing here is a diagnosis:
+# the labels are research bands, not clinical categories.
+
+labels:
+  three_class:
+    healthy_max: 5        # AHI < 5
+    monitor_max: 15       # 5 <= AHI < 15
+    see_doctor_min: 15    # AHI >= 15
+
+  two_class:
+    elevated_min: 15      # primary binary split
+
+  two_class_sensitivity:
+    elevated_min: 5       # sensitivity split (<5 vs >=5)
+
+  participant_rule: worst_reliable_night      # primary
+  comparison_rule: mean_reliable_night        # always reported alongside
+  min_tst_h: 2.0
+  target_recall_see_doctor: 0.85
+  non_diagnostic: true
+
+features:
+  epoch_seconds: 30
+  hr_valid_bpm: [20, 250]
+  spo2_valid_pct: [50, 120]
+  desat_threshold_pct: 90
+  hrv_window_seconds: 60
+  hrv_min_beats: 20
+  rmssd_bounds_ms: [5, 200]
+  posture_change_deg: 30
+  # night-level plausibility gates (DS_97-style artefact nights)
+  hr_nightly_plausible_bpm: [30, 120]
+  spo2_nightly_plausible_pct: [85, 100]
+  hrv_min_nightly_epochs: 30    # >=15 min of QC-passed HRV before a nightly RMSSD is reported
+
+runtime:
+  workers: 4
+  pilot_nights: 30
+  pilot_seed: 42
