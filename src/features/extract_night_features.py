@@ -34,7 +34,7 @@ PROCESSED = PROJECT_ROOT / "data" / "processed"
 NIGHT_DIR = PROCESSED / "night_features"
 COMBINED_EPOCHS = PROCESSED / "features_epoch.parquet"
 COMBINED_NIGHTLY = PROCESSED / "features_night.parquet"
-AUDIT = OUTPUTS / "phase2_pilot_audit.csv"
+AUDIT = OUTPUTS / "phase2_extraction_audit.csv"
 SELECTION = OUTPUTS / "phase2_pilot_selection.csv"
 
 # Nights that exercise a known data quirk; always included in the pilot.

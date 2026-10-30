@@ -264,11 +264,13 @@ def main(argv: list[str] | None = None) -> int:
     results: dict[str, dict] = {}
 
     # ---- ablation arms, primary 3-class label --------------------------
+    # core and full both get the cost-sensitive threshold: core is the
+    # deployable arm and must carry its own operating point.
     for arm in ("core", "core_posangle", "core_coverage", "full"):
         cols = arm_columns(arm, table)
         res = evaluate(
             table, cols, "label_3class", "see_doctor", cfg, f"arm_{arm}_3class",
-            threshold_target=cfg.labels.target_recall_see_doctor if arm == "full" else None,
+            threshold_target=cfg.labels.target_recall_see_doctor if arm in ("core", "full") else None,
         )
         results[arm] = res
         summaries.append(summarize(res))
@@ -438,8 +440,13 @@ def _save_classifier(table: pd.DataFrame, results: dict, cfg) -> None:
     params, _ = _pick_params(X, np.array([{"healthy": 0, "monitor": 1, "see_doctor": 2}[v] for v in y]), SEED)
     model = rf(params)
     model.fit(X, y)
-    # cost-sensitive threshold from the 2-class analysis on the full arm
-    t = float(results["two_class"]["per_fold"]["threshold"].mean()) if "threshold" in results["two_class"]["per_fold"] else 0.5
+    # Serial prediction: for single-row inference the joblib thread dispatch of
+    # n_jobs=-1 costs ~50 ms per call; serial costs a few ms.
+    model.n_jobs = 1
+    # The core arm's OWN operating point on P(see_doctor) — never a threshold
+    # borrowed from a different model's probability scale.
+    core_folds = results["core"]["per_fold"]
+    t = float(core_folds["threshold"].mean()) if "threshold" in core_folds else 0.5
     clf = Phase2Classifier(
         model=model,
         feature_names=cols,
@@ -450,10 +457,11 @@ def _save_classifier(table: pd.DataFrame, results: dict, cfg) -> None:
         config_path=str(cfg.source_path),
         target_recall=cfg.labels.target_recall_see_doctor,
         fitted_on=f"{len(table)} participants, PAAWS R2 v1.3 (research bands, not diagnoses)",
+        positive_class="see_doctor",
         extra={"disclaimer": DISCLAIMER},
     )
     path = clf.save()
-    log.info("Saved deployable classifier -> %s (threshold %.2f)", path, t)
+    log.info("Saved deployable classifier -> %s (threshold %.2f on P(see_doctor))", path, t)
 
 
 def _write_report(cfg, table, summaries, results, imp_rows, cal_rows, brier, quick: bool) -> None:
@@ -505,13 +513,15 @@ def _write_report(cfg, table, summaries, results, imp_rows, cal_rows, brier, qui
         "Thresholds are chosen on inner-CV out-of-fold probabilities within each training fold,",
         "then applied to the untouched test fold — the test fold never influences the threshold.",
         "",
-        "### 3-class, full arm: flag See-Doctor when P(see_doctor) >= t",
+        "### 3-class: flag See-Doctor when P(see_doctor) >= t",
         "",
-        "| metric | mean ± sd |",
-        "|---|---|",
+        "| arm | metric | mean ± sd |",
+        "|---|---|---|",
     ]
-    if "arm_full_3class" in s:
-        r = s["arm_full_3class"]
+    for tag, name in [("arm_core_3class", "core (deployable)"), ("arm_full_3class", "full")]:
+        if tag not in s:
+            continue
+        r = s[tag]
         for k, label in [
             ("threshold", "decision threshold"),
             ("recall_pos_at_t", "See-Doctor recall at threshold"),
@@ -521,7 +531,7 @@ def _write_report(cfg, table, summaries, results, imp_rows, cal_rows, brier, qui
             ("default_recall_pos", "See-Doctor recall at default argmax"),
         ]:
             if k + "_mean" in r:
-                lines.append(f"| {label} | {r[k + '_mean']:.3f} ± {r.get(k + '_sd', float('nan')):.3f} |")
+                lines.append(f"| {name} | {label} | {r[k + '_mean']:.3f} ± {r.get(k + '_sd', float('nan')):.3f} |")
 
     lines += [
         "",

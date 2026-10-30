@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config()
 
     selection = pd.read_csv(OUTPUTS / "phase2_pilot_selection.csv")
-    audit = pd.read_csv(OUTPUTS / "phase2_pilot_audit.csv")
+    audit = pd.read_csv(OUTPUTS / "phase2_extraction_audit.csv")
     nightly = pd.read_parquet(PROCESSED / "features_night.parquet")
     metrics = pd.read_csv(OUTPUTS / "paaws_night_metrics.csv").set_index("night_id")
     nights = {n.night_id: n for n in discover_nights()}

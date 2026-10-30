@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import sys
 
+import numpy as np
 import pandas as pd
 
 from src.audit.common import OUTPUTS, PROJECT_ROOT
@@ -51,7 +52,12 @@ def main() -> int:
 
     brier = None
     try:
-        brier = float(pd.read_csv(OUTPUTS / "phase2_calibration.csv")["brier"].iloc[0]) if "brier" in cal else None
+        oof = pd.read_csv(OUTPUTS / "phase2_oof_predictions.csv")
+        pcols = [c for c in oof.columns if c.startswith("p_")]
+        per_class = [
+            float((((oof["y_true"] == c[2:]).astype(int) - oof[c]) ** 2).mean()) for c in pcols
+        ]
+        brier = round(float(np.mean(per_class)), 4)
     except Exception:  # noqa: BLE001
         pass
 
@@ -118,9 +124,17 @@ def main() -> int:
                 f"{r['precision_pos_at_t_mean']:.3f} | {r['threshold_mean']:.2f} |"
             )
 
-    thr("arm_full_3class", "3-class, P(See Doctor) ≥ t")
+    thr("arm_core_3class", "3-class core (deployable), P(See Doctor) ≥ t")
+    thr("arm_full_3class", "3-class all features, P(See Doctor) ≥ t")
     thr("two_class_ge15", "2-class ≥15 vs <15")
     thr("two_class_ge5", "2-class ≥5 vs <5 (sensitivity split)")
+
+    latency = None
+    try:
+        lat = pd.read_csv(OUTPUTS / "phase2_latency_benchmark.csv")
+        latency = lat.iloc[0]
+    except Exception:  # noqa: BLE001
+        pass
 
     lines += [
         "",
@@ -136,6 +150,15 @@ def main() -> int:
         "- **AHI is an inferred research estimate**, not a centrally re-scored clinical AHI.",
         "- Structured missingness (no SpO2 channel on 8/253 nights; unusable ECG-HRV on a",
         "  minority of nights) is preserved as NaN + flags, never imputed.",
+    ]
+    if latency is not None:
+        lines += [
+            "- **Real-time feasibility:** single classification from a 10-minute rolling",
+            f"  buffer takes p50 {latency['p50_ms']:.1f} ms / p95 {latency['p95_ms']:.1f} ms",
+            f"  (budget 50 ms), using the same feature code as training.",
+        ]
+
+    lines += [
         "",
         "---",
         "## 5. Four questions for your review",
@@ -145,8 +168,11 @@ def main() -> int:
         "   the See-Doctor threshold be ≥15 or higher (e.g. ≥20) for a consumer-facing band?",
         "2. **Multi-night label rule.** Primary rule: worst reliable night (screening-style",
         "   caution); comparison: mean of reliable nights. Which should the dashboard use?",
-        f"   (Performance difference is reported above: worst {full['macro_f1_mean']:.3f} vs mean {mean_rule['macro_f1_mean']:.3f} macro-F1.)"
-        if full and mean_rule else "2. **Multi-night label rule.** worst vs mean reliable night (see model report).",
+        (
+            f"   (Performance difference is reported above: worst {full['macro_f1_mean']:.3f} vs mean {mean_rule['macro_f1_mean']:.3f} macro-F1.)"
+            if full and mean_rule
+            else "   (See the model report for the worst-vs-mean comparison.)"
+        ),
         "3. **Acceptable false-negative rate for See Doctor.** Current target: ≥85% recall",
         "   on ≥15 with the threshold that maximises specificity subject to that recall.",
         "   Is 85% recall acceptable, or should this be stricter (e.g. 90–95%), accepting",

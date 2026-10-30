@@ -22,6 +22,7 @@ import time
 import numpy as np
 import pandas as pd
 
+from src.audit.common import OUTPUTS, PROJECT_ROOT
 from src.features.config import FeatureConfig, Phase2Config, load_config
 from src.features.features import (
     EPOCH_FEATURES,
@@ -172,19 +173,21 @@ def predict_from_rolling_buffer(
     nightly = aggregate_nightly(rows, cfg.features)
     t_agg = time.perf_counter() - t0 - t_feat
 
-    band = classifier.predict_bands(nightly)[0]
-    elevated = classifier.predict_elevated(nightly)[0]
+    # ONE model inference serves the band, the probabilities and the threshold
+    # flag — the real-time budget does not allow paying inference twice.
+    full = classifier.predict_full(nightly)
     t_total = (time.perf_counter() - t0) * 1000.0
 
     return {
-        "band": band["band"],
-        "probabilities": band["probabilities"],
-        "p_elevated": elevated["p_elevated"],
-        "flagged_elevated": elevated["flagged_elevated"],
-        "threshold": elevated["threshold"],
+        "band": full["band"],
+        "probabilities": full["probabilities"],
+        "p_positive": full["p_positive"],
+        "positive_class": full["positive_class"],
+        "flagged_positive": full["flagged_positive"],
+        "threshold": full["threshold"],
         "n_windows": int(len(rows)),
         "hrv_valid_frac": nightly.get("hrv_valid_frac"),
-        "disclaimer": band["disclaimer"],
+        "disclaimer": full["disclaimer"],
         "latency_ms": {
             "total": round(t_total, 2),
             "features": round(t_feat * 1000.0, 2),
@@ -241,6 +244,14 @@ def run_benchmark(n_iter: int = 200, classifier: Phase2Classifier | None = None)
 
 
 if __name__ == "__main__":
+    import json
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     res = run_benchmark()
+    out = PROJECT_ROOT / "outputs" / "phase2_latency_benchmark.csv"
+    pd.DataFrame([res]).to_csv(out, index=False)
+    # one worked example for the report
+    example = predict_from_rolling_buffer(synthetic_buffer(), Phase2Classifier.load())
+    (PROJECT_ROOT / "outputs" / "phase2_latency_example.json").write_text(json.dumps(example, indent=2, default=str))
     print(res)
+    print(f"wrote {out}")
