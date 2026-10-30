@@ -1,0 +1,21 @@
+# Python environment
+.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Generated participant-level outputs (kept local; regenerate with src/audit)
+outputs/
+
+# Raw / large data (PAAWS lives on an external SSD, never in the repo)
+data/raw/
+*.edf
+*.zip
+
+# Model artifacts
+models/*.joblib
+models/*.pkl
+
+# ai
+AGENTS.md
+
